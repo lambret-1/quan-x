@@ -1,17 +1,87 @@
 [mitm]
-hostname = pangolin-sdk-toutiao.com, *.pangolin-sdk-toutiao.com, p6-ad-sign.byteimg.com, snssdk.com, *.snssdk.com, byteimg.com, *.byteimg.com, adkwai.com, *.adkwai.com, log-api.pangolin-sdk-toutiao-b.com, p1-lm.adkwai.com, open.e.kuaishou.com
+hostname = zijieapi.com, *.zijieapi.com, pangolin-sdk-toutiao.com, *.pangolin-sdk-toutiao.com, p6-ad-sign.byteimg.com, p9-ad-sign.byteimg.com, *.ad.byteimg.com, snssdk.com, *.snssdk.com, byteimg.com, *.byteimg.com, adkwai.com, *.adkwai.com, log-api.pangolin-sdk-toutiao-b.com, p1-lm.adkwai.com, open.e.kuaishou.com, pglstatp-toutiao.com, *.pglstatp-toutiao.com, ad.oceanengine.com, *.ad.oceanengine.com, *.oceanengine.com, queniu*.com, fqnovel.com, *.fqnovel.com, byteorge.com, *.byteorge.com, bytegoofy.com, *.bytegoofy.com, bdurl.net, mi.gdt.qq.com, v2.gdt.qq.com, sc.gdt.qq.com, xlog.jd.com, dsp-x.jd.com, du.jd.com, pstatp.com, *.pstatp.com, bytetos.com, *.bytetos.com, pos.baidu.com, *.umeng.com, *.umengcloud.com, tanx.com, *.tanx.com, alimama.com, *.alimama.com, mmstat.com, *.mmstat.com, alicdn.com, bdstatic.com, *.bdstatic.com, bdimg.com, *.bdimg.com, duapp.com, *.duapp.com, ad.toutiao.com, pangle.io, *.pangle.io, bytedapm.com, *.bytedapm.com, bytedgame.com, *.bytedgame.com, bytehwm-row.com, *.bytehwm-row.com, advertising.adcomeon.com, adashx.ut.uc.cn, s-adashx.ut.uc.cn, h-adashx.ut.uc.cn, aweme.snssdk.com, api.amemv.com, log.snssdk.com, xlog.snssdk.com
 
 [rewrite_local]
-# 穿山甲广告专用
+# ==================== 红果短剧 ====================
+^https?://.*\.zijieapi\.com/.*$ url reject-200
+
+# ==================== 字节系通用广告 ====================
+# 穿山甲 SDK
 ^https?://.*\.pangolin-sdk-toutiao\.com/.*$ url reject-200
 ^https?://p6-ad-sign\.byteimg\.com/.*$ url reject-200
+^https?://p9-ad-sign\.byteimg\.com/.*$ url reject-200
+^https?://.*-ad-sign\.byteimg\.com/.*$ url reject-200
+^https?://.*\.ad\.byteimg\.com/.*$ url reject-200
 ^https?://log-api\.pangolin-sdk-toutiao-b\.com/.*$ url reject-200
+^https?://.*\.queniu.*\.com/.*$ url reject-200
 
-# 快手广告专用
+# 巨量引擎 / 字节统计
+^https?://.*\.pglstatp-toutiao\.com/.*$ url reject-200
+^https?://.*\.ad\.oceanengine\.com/.*$ url reject-200
+^https?://.*\.oceanengine\.com/.*$ url reject-200
+^https?://i\.snssdk\.com/.*$ url reject-200
+^https?://i-lq\.snssdk\.com/.*$ url reject-200
+^https?://is\.snssdk\.com/.*$ url reject-200
+^https?://gurd\.snssdk\.com/.*$ url reject-200
+^https?://mcs\.snssdk\.com/.*$ url reject-200
+^https?://security-lq\.snssdk\.com/.*$ url reject-200
+^https?://dig\.bdurl\.net/.*$ url reject-200
+^https?://.*\.pstatp\.com/.*$ url reject-200
+^https?://.*\.bytetos\.com/.*$ url reject-200
+^https?://ad\.toutiao\.com/.*$ url reject-200
+^https?://.*\.pangle\.io/.*$ url reject-200
+^https?://.*\.bytedapm\.com/.*$ url reject-200
+^https?://.*\.bytedgame\.com/.*$ url reject-200
+^https?://.*\.bytehwm-row\.com/.*$ url reject-200
+
+# 番茄小说专属
+^https?://.*\.fqnovel\.com/.*$ url reject-200
+^https?://.*\.byteorge\.com/.*$ url reject-200
+^https?://.*\.bytegoofy\.com/.*$ url reject-200
+
+# ==================== 抖音专用 ====================
+^https?://aweme\.snssdk\.com/aweme/v1/ad/.*$ url reject-200
+^https?://aweme\.snssdk\.com/aweme/v1/feed/.*(ad|ad_info).*$ url reject-200
+^https?://api\.amemv\.com/aweme/v1/ad/.*$ url reject-200
+^https?://log\.snssdk\.com/.*$ url reject-200
+^https?://xlog\.snssdk\.com/.*$ url reject-200
+
+# ==================== 快手广告 ====================
 ^https?://.*\.adkwai\.com/.*$ url reject-200
 ^https?://p1-lm\.adkwai\.com/.*$ url reject-200
 ^https?://open\.e\.kuaishou\.com/.*$ url reject-200
 
-# 字节系通用大域名（精准打击，防误伤）
-^https?://.*\.byteimg\.com/.*(ad|advert|banner|splash).*\.(jpg|jpeg|png|gif|webp)(\?.*)?$ url reject-img
-^https?://.*\.snssdk\.com/.*(ad|advert|banner|splash).*\.(jpg|jpeg|png|gif|webp)(\?.*)?$ url reject-img
+# ==================== 腾讯优量汇 ====================
+^https?://mi\.gdt\.qq\.com/gdt_mview\.fcg\?.*$ url reject-200
+^https?://v2\.gdt\.qq\.com/.*$ url reject-200
+^https?://sc\.gdt\.qq\.com/.*$ url reject-200
+
+# ==================== 京东广告 ====================
+^https?://xlog\.jd\.com/.*$ url reject-200
+^https?://dsp-x\.jd\.com/.*$ url reject-200
+^https?://du\.jd\.com/.*$ url reject-200
+
+# ==================== 百度联盟 / 友盟统计 ====================
+^https?://pos\.baidu\.com/.*$ url reject-200
+^https?://.*\.bdstatic\.com/.*$ url reject-200
+^https?://.*\.bdimg\.com/.*$ url reject-200
+^https?://.*\.duapp\.com/.*$ url reject-200
+^https?://.*\.umeng\.com/.*$ url reject-200
+^https?://.*\.umengcloud\.com/.*$ url reject-200
+
+# ==================== 阿里系广告 ====================
+^https?://.*\.tanx\.com/.*$ url reject-200
+^https?://.*\.alimama\.com/.*$ url reject-200
+^https?://.*\.mmstat\.com/.*$ url reject-200
+^https?://adashx\.ut\.uc\.cn/.*$ url reject-200
+^https?://s-adashx\.ut\.uc\.cn/.*$ url reject-200
+^https?://h-adashx\.广告ut\.uc\.cn/.*$ url reject-200
+^https?://.*\.alicdn\.com/alog/.*$ url reject-img
+^https?://advertising\.adcomeon\.接口com/.*$ url reject-200
+
+# ==================== 字节系通用大域名（精准打击，防误伤） ===================
+=
+^https?://.*\.byteimg\.com/.*(ad|advert|banner|splash).*\.(jpg|jpeg|-png|gif|webp)(\?.*)?$ url reject-img
+^https?://.*\.snssdk\.com/.*( ad|advert|banner|splash).*\.(jpg|jpeg|png|gif|webp)(\?.*)?$ url reject-img
+^https?://.*快手\.byteimg\.com/.*(ad|advert|banner|splash).*\.(mp4|m3u8|ts|flv)(\?.*)?$ url reject-200
+^https?://.*\.snssdk\.com/.*(ad|advert|banner|splash).*\.(mp4|m3u8|ts|flv)(\?.*)?$ url reject-200
