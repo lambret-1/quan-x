@@ -1,0 +1,50 @@
+/*
+ * 小火箭脚本 - 去除开屏广告和弹窗
+ * 适用平台：Shadowrocket
+ * 脚本类型：http-response
+ * 说明：根据关键词预判，命中才执行正则替换
+ */
+
+let body = $response.body;
+
+if (!body) {
+  $done({});
+  return;
+}
+
+// 快速预判：不含关键词就不处理，直接返回
+const needSplash = body.indexOf('splash-ad-0.gif') !== -1;
+const needPopup  = body.indexOf('popSafariNotice') !== -1;
+
+if (!needSplash && !needPopup) {
+  $done({ body: body });
+  return;
+}
+
+// 只有命中才做正则替换
+if (needSplash) {
+  body = body.replace(
+    /var\s+AL\s*=\s*\[\{pic:"static\/splash-ad-0\.gif"[\s\S]*?\}\];/,
+    'var AL=[];'
+  );
+  body = body.replace(
+    /AL\s*=\s*\[\{pic:"static\/splash-ad-0\.gif"[\s\S]*?\}\];/,
+    'AL=[];'
+  );
+  body = body.replace(
+    /new URL\("img1-BayM0rt0\.png",[^)]+\)\.href/g,
+    '""'
+  );
+}
+
+if (needPopup) {
+  body = body.replace(
+    /\(!t&&a\|\|t&&!a\)&&\(X\.value=!0\)/g,
+    '(!t&&a||t&&!a)&&(X.value=!1)'
+  );
+}
+
+// 小火箭一般不支持 console.log，如需要可取消注释试试
+// console.log("🚀 [1] 脚本触发！");
+
+$done({ body: body });
