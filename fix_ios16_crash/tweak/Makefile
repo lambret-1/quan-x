@@ -1,5 +1,5 @@
 ARCHS = arm64
-TARGET = iphone:clang:16.4:15.0
+TARGET = iphone:clang:latest:15.0
 INSTALL_TARGET_PROCESSES = Quantumult X
 
 include $(THEOS)/makefiles/common.mk
