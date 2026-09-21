@@ -1,0 +1,107 @@
+name: 编译iOS16闪退修复
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'fix_ios16_crash/**'
+      - '.github/workflows/build-fix.yml'
+
+jobs:
+  build-fix:
+    runs-on: macos-14
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Theos 依赖
+        run: |
+          brew install ldid xz
+          sudo xcode-select -switch /Applications/Xcode.app
+
+      - name: 安装 Theos
+        run: |
+          export THEOS=~/theos
+          git clone --recursive https://github.com/theos/theos.git $THEOS
+          curl -LO https://github.com/theos/sdks/archive/master.zip
+          unzip -q master.zip -d /tmp/sdks
+          cp -r /tmp/sdks/sdks-master/*.sdk $THEOS/sdks/
+          echo "THEOS=$THEOS" >> $GITHUB_ENV
+
+      - name: 编译 Tweak dylib
+        run: |
+          cd fix_ios16_crash/tweak
+          make clean package FINAL=1
+          ls -la packages/
+
+      - name: 提取 dylib
+        run: |
+          cd fix_ios16_crash
+          DEB=$(ls tweak/packages/*.deb | head -1)
+          mkdir -p extract
+          dpkg-deb -x "$DEB" extract/
+          DYLIB=$(find extract -name "*.dylib" | head -1)
+          echo "DYLIB_PATH=$DYLIB" >> $GITHUB_ENV
+          echo "找到 dylib: $DYLIB"
+          file "$DYLIB"
+          ls -la "$DYLIB"
+
+      - name: 下载原始 IPA
+        run: |
+          curl -sL -o Quan_original.b64 "https://raw.githubusercontent.com/lambret-1/quan-x/main/docs/Quantumult%20X_1.5.0(1).ipa"
+          base64 -d Quan_original.b64 > Quan_original.ipa
+          ls -la Quan_original.ipa
+
+      - name: 安装 optool
+        run: |
+          brew install optool || true
+          # 如果 optool 不可用，编译 insert_dylib
+          if ! command -v optool &>/dev/null; then
+            git clone https://github.com/Tyilo/insert_dylib.git /tmp/insert_dylib
+            cd /tmp/insert_dylib
+            xcodebuild -project insert_dylib.xcodeproj -configuration Release build
+            cp build/Release/insert_dylib /usr/local/bin/ || sudo cp build/Release/insert_dylib /usr/local/bin/
+          fi
+
+      - name: 解压 IPA 并注入 dylib
+        run: |
+          mkdir -p /tmp/ipa_work
+          cd /tmp/ipa_work
+          unzip -q "${GITHUB_WORKSPACE}/Quan_original.ipa"
+          APP="Payload/Quantumult X.app"
+          
+          # 复制 dylib
+          cp "${GITHUB_WORKSPACE}/${{ env.DYLIB_PATH }}" "$APP/QXFix.dylib"
+          
+          # 注入加载命令
+          BINARY="$APP/Quantumult X"
+          if command -v optool &>/dev/null; then
+            optool install -c load -p "@executable_path/QXFix.dylib" -t "$BINARY"
+          else
+            insert_dylib --inplace "@executable_path/QXFix.dylib" "$BINARY"
+          fi
+          
+          # 验证注入
+          echo "=== 验证加载命令 ==="
+          otool -L "$BINARY" | grep -i qxfix
+          
+          # 移除旧签名
+          rm -rf "$APP/_CodeSignature"
+          
+          # 重新打包
+          zip -qr "${GITHUB_WORKSPACE}/QuantumultX_1.5.0_iOS16_fixed.ipa" Payload
+          ls -la "${GITHUB_WORKSPACE}/QuantumultX_1.5.0_iOS16_fixed.ipa"
+
+      - name: 上传修复后 IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: QuantumultX_1.5.0_iOS16_fixed
+          path: QuantumultX_1.5.0_iOS16_fixed.ipa
+          retention-days: 30
+
+      - name: 上传 dylib
+        uses: actions/upload-artifact@v4
+        with:
+          name: QXFix.dylib
+          path: ${{ env.DYLIB_PATH }}
+          retention-days: 30
