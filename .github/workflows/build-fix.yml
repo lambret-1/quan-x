@@ -55,7 +55,7 @@ jobs:
       - name: 下载原始 IPA
         run: |
           curl -sL -o Quan_original.b64 "https://raw.githubusercontent.com/lambret-1/quan-x/main/docs/Quantumult%20X_1.5.0(1).ipa"
-          base64 -d Quan_original.b64 > Quan_original.ipa
+          base64 -D -i Quan_original.b64 -o Quan_original.ipa
           ls -la Quan_original.ipa
 
       - name: 安装注入工具
