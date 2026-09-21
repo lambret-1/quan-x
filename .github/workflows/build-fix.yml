@@ -37,15 +37,20 @@ jobs:
 
       - name: 提取 dylib
         run: |
-          cd fix_ios16_crash
-          DEB=$(ls tweak/packages/*.deb | head -1)
-          mkdir -p extract
-          dpkg-deb -x "$DEB" extract/
-          DYLIB=$(find extract -name "*.dylib" | head -1)
-          echo "DYLIB_PATH=$DYLIB" >> $GITHUB_ENV
+          cd fix_ios16_crash/tweak
+          # 直接从Theos编译输出目录复制dylib
+          DYLIB=$(find .theos -name "QXFix.dylib" | head -1)
+          if [ -z "$DYLIB" ]; then
+            echo "错误: 未找到编译输出的QXFix.dylib"
+            find .theos -name "*.dylib" 2>/dev/null || true
+            exit 1
+          fi
+          cp "$DYLIB" "${GITHUB_WORKSPACE}/QXFix.dylib"
+          echo "DYLIB_PATH=QXFix.dylib" >> $GITHUB_ENV
           echo "找到 dylib: $DYLIB"
-          file "$DYLIB"
-          ls -la "$DYLIB"
+          file "${GITHUB_WORKSPACE}/QXFix.dylib"
+          ls -la "${GITHUB_WORKSPACE}/QXFix.dylib"
+          otool -L "${GITHUB_WORKSPACE}/QXFix.dylib"
 
       - name: 下载原始 IPA
         run: |
