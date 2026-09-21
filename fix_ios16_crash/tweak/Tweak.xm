@@ -13,3 +13,21 @@
 }
 
 %end
+
+%hook NSURL
+
++ (NSURL *)fileURLWithPath:(NSString *)path {
+    if (!path) {
+        return nil;
+    }
+    return %orig(path);
+}
+
++ (NSURL *)fileURLWithPath:(NSString *)path isDirectory:(BOOL)isDir {
+    if (!path) {
+        return nil;
+    }
+    return %orig(path, isDir);
+}
+
+%end
