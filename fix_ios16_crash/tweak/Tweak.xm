@@ -5,7 +5,7 @@ static BOOL isMainAppProcess() {
     static BOOL result = NO;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        NSString *executableName = [[NSBundle mainBundle] executablePath]?.lastPathComponent;
+        NSString *executableName = [[[NSBundle mainBundle] executablePath] lastPathComponent];
         // 主应用可执行文件名为 "Quantumult X"
         // Network Extension 通常为 "PacketTunnel" 或类似名称
         if ([executableName isEqualToString:@"Quantumult X"]) {
