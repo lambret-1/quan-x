@@ -79,12 +79,27 @@ jobs:
           
           # 注入加载命令（insert_dylib用法: dylib_path binary_path [new_binary_path]）
           BINARY="$APP/Quantumult X"
-          insert_dylib "@executable_path/QXFix.dylib" "$BINARY" "$BINARY.patched"
-          mv "$BINARY.patched" "$BINARY"
+          echo "=== 注入前二进制信息 ==="
+          file "$BINARY"
+          ls -la "$BINARY"
+          echo "=== 执行注入 ==="
+          insert_dylib "@executable_path/QXFix.dylib" "$BINARY" "$BINARY.patched" 2>&1
+          INJECT_EXIT=$?
+          echo "insert_dylib 退出码: $INJECT_EXIT"
+          if [ -f "$BINARY.patched" ]; then
+            mv "$BINARY.patched" "$BINARY"
+            echo "注入文件已替换"
+          else
+            echo "错误: 未生成patched文件"
+            ls -la "$APP/"
+            exit 1
+          fi
           
           # 验证注入
           echo "=== 验证加载命令 ==="
-          otool -L "$BINARY" | grep -i qxfix
+          otool -L "$BINARY"
+          echo "=== 检查QXFix ==="
+          otool -L "$BINARY" | grep -i qxfix && echo "注入验证成功" || echo "警告: 未找到QXFix加载命令"
           
           # 移除旧签名（未签名IPA，移除_CodeSignature）
           rm -rf "$APP/_CodeSignature"
