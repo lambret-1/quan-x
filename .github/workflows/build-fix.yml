@@ -101,8 +101,9 @@ jobs:
           retention-days: 30
 
       - name: 上传 dylib
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: QXFix.dylib
-          path: ${{ env.DYLIB_PATH }}
+          path: QXFix.dylib
           retention-days: 30
