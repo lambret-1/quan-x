@@ -60,12 +60,15 @@ jobs:
 
       - name: 安装注入工具
         run: |
-          # 编译 insert_dylib（比 optool 更可靠）
-          git clone --depth 1 https://github.com/Tyilo/insert_dylib.git /tmp/insert_dylib
-          cd /tmp/insert_dylib
-          xcodebuild -project insert_dylib.xcodeproj -configuration Release build CONFIGURATION_BUILD_DIR=/tmp/insert_dylib/build 2>&1 | tail -3
-          cp /tmp/insert_dylib/build/insert_dylib /usr/local/bin/
-          insert_dylib --help 2>&1 | head -3 || true
+          brew install opthread || brew install optool || true
+          # 如果brew安装失败，编译optool
+          if ! command -v optool &>/dev/null; then
+            git clone --depth 1 https://github.com/alexzielenski/optool.git /tmp/optool
+            cd /tmp/optool
+            xcodebuild -project optool.xcodeproj -configuration Release build CONFIGURATION_BUILD_DIR=/tmp/optool/build 2>&1 | tail -3
+            cp /tmp/optool/build/optool /usr/local/bin/
+          fi
+          optool --help 2>&1 | head -3 || true
 
       - name: 解压 IPA 并注入 dylib
         run: |
@@ -77,10 +80,9 @@ jobs:
           # 复制 dylib
           cp "${GITHUB_WORKSPACE}/${{ env.DYLIB_PATH }}" "$APP/QXFix.dylib"
           
-          # 注入加载命令
+          # 注入加载命令（使用optool）
           BINARY="$APP/Quantumult X"
-          insert_dylib "@executable_path/QXFix.dylib" "$BINARY" "$BINARY.new"
-          mv "$BINARY.new" "$BINARY"
+          optool install -c load -p "@executable_path/QXFix.dylib" -t "$BINARY"
           echo "注入完成"
           
           # 移除旧签名（未签名IPA，移除_CodeSignature）
