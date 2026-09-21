@@ -4,6 +4,8 @@
 
 ^https?://h5\.xxoox20\.org/api/index url script-response-body https://raw.githubusercontent.com/lambret-1/quan-x/main/xiangjiao/ad1.js
 
+^https?://h5\.xxoox20\.org/api/init/assets/index-legacy-D4hw0yAL.js url script-response-body https://raw.githubusercontent.com/lambret-1/quan-x/main/xiangjiao/adjs.js
+
 
 [MITM]
 hostname = %APPEND% h5.xxoox20.org
