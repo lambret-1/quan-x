@@ -77,9 +77,10 @@ jobs:
           # 复制 dylib
           cp "${GITHUB_WORKSPACE}/${{ env.DYLIB_PATH }}" "$APP/QXFix.dylib"
           
-          # 注入加载命令
+          # 注入加载命令（insert_dylib用法: dylib_path binary_path [new_binary_path]）
           BINARY="$APP/Quantumult X"
-          insert_dylib --inplace "@executable_path/QXFix.dylib" "$BINARY"
+          insert_dylib "@executable_path/QXFix.dylib" "$BINARY" "$BINARY.patched"
+          mv "$BINARY.patched" "$BINARY"
           
           # 验证注入
           echo "=== 验证加载命令 ==="
