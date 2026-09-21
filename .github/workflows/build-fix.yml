@@ -71,7 +71,7 @@ jobs:
         run: |
           mkdir -p /tmp/ipa_work
           cd /tmp/ipa_work
-          unzip -q "${GITHUB_WORKSPACE}/Quan_original.ipa"
+          unzip -qo "${GITHUB_WORKSPACE}/Quan_original.ipa"
           APP="Payload/Quantumult X.app"
           
           # 复制 dylib
