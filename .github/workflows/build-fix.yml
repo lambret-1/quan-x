@@ -105,6 +105,7 @@ jobs:
           rm -rf "$APP/_CodeSignature"
           
           # 重新打包
+          rm -f "${GITHUB_WORKSPACE}/QuantumultX_1.5.0_iOS16_fixed.ipa"
           zip -qr "${GITHUB_WORKSPACE}/QuantumultX_1.5.0_iOS16_fixed.ipa" Payload
           ls -la "${GITHUB_WORKSPACE}/QuantumultX_1.5.0_iOS16_fixed.ipa"
 
