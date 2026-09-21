@@ -14,24 +14,25 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: 安装 Theos 依赖
+      - name: 安装依赖
         run: |
           brew install ldid xz
           sudo xcode-select -switch /Applications/Xcode.app
+          xcodebuild -version
 
       - name: 安装 Theos
         run: |
           export THEOS=~/theos
-          git clone --recursive https://github.com/theos/theos.git $THEOS
-          curl -LO https://github.com/theos/sdks/archive/master.zip
-          unzip -q master.zip -d /tmp/sdks
-          cp -r /tmp/sdks/sdks-master/*.sdk $THEOS/sdks/
+          git clone --recursive --depth 1 https://github.com/theos/theos.git $THEOS
+          # 使用 Xcode 自带 iOS SDK，无需额外下载
+          ls $THEOS/sdks/ || true
           echo "THEOS=$THEOS" >> $GITHUB_ENV
+          echo "THEOS_DEVICE_IP=" >> $GITHUB_ENV
 
       - name: 编译 Tweak dylib
         run: |
           cd fix_ios16_crash/tweak
-          make clean package FINAL=1
+          make clean package FINAL=1 THEOS=~/theos 2>&1
           ls -la packages/
 
       - name: 提取 dylib
@@ -52,16 +53,14 @@ jobs:
           base64 -d Quan_original.b64 > Quan_original.ipa
           ls -la Quan_original.ipa
 
-      - name: 安装 optool
+      - name: 安装注入工具
         run: |
-          brew install optool || true
-          # 如果 optool 不可用，编译 insert_dylib
-          if ! command -v optool &>/dev/null; then
-            git clone https://github.com/Tyilo/insert_dylib.git /tmp/insert_dylib
-            cd /tmp/insert_dylib
-            xcodebuild -project insert_dylib.xcodeproj -configuration Release build
-            cp build/Release/insert_dylib /usr/local/bin/ || sudo cp build/Release/insert_dylib /usr/local/bin/
-          fi
+          # 编译 insert_dylib（比 optool 更可靠）
+          git clone --depth 1 https://github.com/Tyilo/insert_dylib.git /tmp/insert_dylib
+          cd /tmp/insert_dylib
+          xcodebuild -project insert_dylib.xcodeproj -configuration Release build CONFIGURATION_BUILD_DIR=/tmp/insert_dylib/build 2>&1 | tail -3
+          cp /tmp/insert_dylib/build/insert_dylib /usr/local/bin/
+          insert_dylib --help 2>&1 | head -3 || true
 
       - name: 解压 IPA 并注入 dylib
         run: |
@@ -75,17 +74,13 @@ jobs:
           
           # 注入加载命令
           BINARY="$APP/Quantumult X"
-          if command -v optool &>/dev/null; then
-            optool install -c load -p "@executable_path/QXFix.dylib" -t "$BINARY"
-          else
-            insert_dylib --inplace "@executable_path/QXFix.dylib" "$BINARY"
-          fi
+          insert_dylib --inplace "@executable_path/QXFix.dylib" "$BINARY"
           
           # 验证注入
           echo "=== 验证加载命令 ==="
           otool -L "$BINARY" | grep -i qxfix
           
-          # 移除旧签名
+          # 移除旧签名（未签名IPA，移除_CodeSignature）
           rm -rf "$APP/_CodeSignature"
           
           # 重新打包
