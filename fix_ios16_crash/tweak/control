@@ -1,0 +1,8 @@
+Package: com.example.qxfix
+Name: QXFix
+Version: 1.0
+Architecture: iphoneos-arm
+Description: Fix Quantumult X iOS16 crash
+Maintainer: fix
+Section: Tweaks
+Priority: optional
