@@ -56,7 +56,7 @@
 
 var uinfo = data.uinfo;
 uinfo.curr_group = {
-           
+
             gname: "尊贵VIP",
             minup: "1000000"};
         // ================== 2. uinfo 会员与次数 ==================
@@ -72,7 +72,7 @@ uinfo.uid  = 5569;
 
         // curr_group 原本是 null，需要新建
         user.curr_group = {
-           
+
             gname: "尊贵VIP",
             minup: "1000000"
         };
