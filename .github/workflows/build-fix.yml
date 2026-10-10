@@ -17,129 +17,29 @@ jobs:
           token: ${{ secrets.NOVEL_REPO_PAT }}
           path: novel-repo
 
+      - name: 安装 Python 依赖
+        run: |
+          pip install zh-narrative-guard pycorrector
+
+      # ---------- 1. 敏感词检查（政治类型） ----------
       - name: 敏感词检查
         run: |
           cd novel-repo
           mkdir -p bug
 
-          # 1. 下载指定的网易前端过滤敏感词库
+          # 只下载“政治类型”词库
           curl -sSL -o /tmp/words.txt "https://raw.githubusercontent.com/konsheng/Sensitive-lexicon/refs/heads/main/Vocabulary/政治类型.txt"
           if [ ! -s /tmp/words.txt ]; then
-            echo "::error::敏感词库失败或为空"
+            echo "::error::敏感词库下载失败或为空"
             exit 1
           fi
 
-          # 2. 内置白名单
-          cat << 'EOF' > /tmp/whitelist.txt
-          女人
-          男人
-          孩子
-          老人
-          母亲
-          父亲
-          儿子
-          女儿
-          丈夫
-          妻子
-          婆婆
-          爷爷
-          奶奶
-          手
-          脚
-          头
-          脸
-          眼睛
-          嘴
-          心
-          抓
-          握
-          拿
-          放
-          走
-          跑
-          看
-          说
-          钱
-          碗
-          筷子
-          桌子
-          椅子
-          灯
-          画
-          纸
-          笔
-          影子
-          墨痕
-          影契
-          画室
-          沈砚
-          苏听晚
-          陈婆婆
-          正午
-          阳光
-          黄昏
-          路灯
-          老樟树
-          梧水街
-          一心堂
-          死
-          血
-          杀
-          尸
-          骨
-          痛
-          伤
-          打
-          骂
-          撕
-          咬
-          吞
-          咽
-          鬼
-          魂
-          命
-          活着
-          死亡
-          血腥
-          残忍
-          恶
-          黑暗
-          阴冷
-          挣扎
-          嘶叫
-          剥离
-          代价
-          诅咒
-          绝望
-          恐惧
-          害怕
-          疯狂
-          崩溃
-          窒息
-          颤抖
-          尖叫
-          愤怒
-          仇恨
-          悲伤
-          哭泣
-          眼泪
-          心脏
-          胸口
-          呼吸
-          身体
-          皮肤
-          血管
-          EOF
+          echo "词库条数: $(wc -l < /tmp/words.txt)"
 
-          # 3. 过滤词库
-          grep -v -F -f /tmp/whitelist.txt /tmp/words.txt > /tmp/words.filtered.txt
-          echo "过滤后词库条数: $(wc -l < /tmp/words.filtered.txt)"
-
-          # 4. 扫描小说，总是写入报告文件
           echo "检查时间: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" > bug/sensitive_words.txt
           echo "----------------------------------------" >> bug/sensitive_words.txt
 
-          if grep -r -n -F -f /tmp/words.filtered.txt "《影笔代理人》" --include='*.md' >> bug/sensitive_words.txt; then
+          if grep -r -n -F -f /tmp/words.txt "《影笔代理人》" --include='*.md' >> bug/sensitive_words.txt; then
             echo "发现敏感词，已写入 bug/sensitive_words.txt"
             echo "HAS_SENSITIVE=1" >> $GITHUB_ENV
           else
@@ -147,6 +47,7 @@ jobs:
           fi
           exit 0
 
+      # ---------- 2. 沉冗内容检查 ----------
       - name: 沉冗内容检查
         run: |
           cd novel-repo
@@ -163,14 +64,11 @@ jobs:
                   s = line.strip()
                   if not s:
                       continue
-                  # 检查段落过长
                   if len(s) > MAX_LEN:
                       issues.append(f"{p}:{i}: 段落过长（{len(s)} 字）")
-                  # 检查疑似重复表达，并捕获重复内容
                   match = re.search(r'(.{2,6})\1{2,}', s)
                   if match:
-                      # match.group(0) 是整段重复的内容，match.group(1) 是重复的基础词
-                      issues.append(f"{p}:{i}: 疑似重复表达（重复内容：'{match.group(0)}'）")
+                      issues.append(f"{p}:{i}: 疑似重复表达（'{match.group(0)}'）")
 
           bug_dir = pathlib.Path('bug')
           bug_dir.mkdir(exist_ok=True)
@@ -192,6 +90,134 @@ jobs:
           PY
           exit 0
 
+      # ---------- 3. 反 AI 味检测 ----------
+      - name: 反 AI 味检测
+        run: |
+          cd novel-repo
+          mkdir -p bug
+          echo "检查时间: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" > bug/ai_slop.txt
+          echo "----------------------------------------" >> bug/ai_slop.txt
+
+          npx wsc-lint check "《影笔代理人》/**/*.md" --format json > /tmp/wsc_output.json 2>/dev/null || true
+
+          python3 - <<'PY'
+          import json, pathlib, os
+
+          with open('/tmp/wsc_output.json', encoding='utf-8') as f:
+              try:
+                  data = json.load(f)
+              except:
+                  data = []
+
+          bug_dir = pathlib.Path('bug')
+          report_file = bug_dir / 'ai_slop.txt'
+
+          if data:
+              with open(report_file, 'a', encoding='utf-8') as out:
+                  for item in data:
+                      file = item.get('file', '')
+                      line = item.get('line', '')
+                      rule = item.get('rule', '')
+                      message = item.get('message', '')
+                      out.write(f"{file}:{line}: [{rule}] {message}\n")
+              print(f"发现 {len(data)} 处 AI 写作特征")
+              with open(os.environ['GITHUB_ENV'], 'a') as f:
+                  f.write("HAS_AISLOP=1\n")
+          else:
+              with open(report_file, 'a', encoding='utf-8') as out:
+                  out.write("未发现 AI 写作特征\n")
+              print("反 AI 味检测通过")
+          PY
+          exit 0
+
+      # ---------- 4. 叙事一致性检查 ----------
+      - name: 叙事一致性检查
+        run: |
+          cd novel-repo
+          mkdir -p bug
+          echo "检查时间: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" > bug/consistency.txt
+          echo "----------------------------------------" >> bug/consistency.txt
+
+          python3 - <<'PY'
+          import pathlib, os
+          from zh_narrative_guard import (
+              detect_weekday_violations,
+              detect_cliche_violations,
+          )
+
+          ROOT = pathlib.Path('《影笔代理人》')
+          issues = []
+
+          for p in sorted(ROOT.rglob('*.md')):
+              text = p.read_text(encoding='utf-8', errors='ignore')
+              for i, line in enumerate(text.splitlines(), 1):
+                  s = line.strip()
+                  if not s:
+                      continue
+                  for v in detect_weekday_violations(s):
+                      issues.append(f"{p}:{i}: 时间线矛盾（声称'{v['claimed_name']}'，应为'{v['expected_name']}'）")
+                  for c in detect_cliche_violations(s):
+                      issues.append(f"{p}:{i}: 陈词滥调（'{c}'）")
+
+          bug_dir = pathlib.Path('bug')
+          report_file = bug_dir / 'consistency.txt'
+
+          if issues:
+              with open(report_file, 'a', encoding='utf-8') as out:
+                  out.write("\n".join(issues))
+              print(f"发现 {len(issues)} 处叙事一致性问题")
+              with open(os.environ['GITHUB_ENV'], 'a') as f:
+                  f.write("HAS_CONSISTENCY=1\n")
+          else:
+              with open(report_file, 'a', encoding='utf-8') as out:
+                  out.write("未发现叙事一致性问题")
+              print("叙事一致性检查通过")
+          PY
+          exit 0
+
+      # ---------- 5. 语法纠错 ----------
+      - name: 语法纠错
+        run: |
+          cd novel-repo
+          mkdir -p bug
+          echo "检查时间: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" > bug/spelling.txt
+          echo "----------------------------------------" >> bug/spelling.txt
+
+          python3 - <<'PY'
+          import pathlib, os
+          from pycorrector import correct
+
+          ROOT = pathlib.Path('《影笔代理人》')
+          issues = []
+
+          for p in sorted(ROOT.rglob('*.md')):
+              text = p.read_text(encoding='utf-8', errors='ignore')
+              for i, line in enumerate(text.splitlines(), 1):
+                  s = line.strip()
+                  if not s or len(s) < 5:
+                      continue
+                  corrected, details = correct(s)
+                  if details:
+                      for d in details:
+                          issues.append(f"{p}:{i}: 疑似错误（'{d[0]}' → '{d[1]}'）")
+
+          bug_dir = pathlib.Path('bug')
+          report_file = bug_dir / 'spelling.txt'
+
+          if issues:
+              with open(report_file, 'a', encoding='utf-8') as out:
+                  out.write("\n".join(issues))
+              print(f"发现 {len(issues)} 处疑似语法/用字错误")
+              with open(os.environ['GITHUB_ENV'], 'a') as f:
+                  f.write("HAS_SPELLING=1\n")
+          else:
+              with open(report_file, 'a', encoding='utf-8') as out:
+                  out.write("未发现语法/用字错误")
+              print("语法纠错检查通过")
+          PY
+          exit 0
+
+      # ---------- 6. 提交并推送 bug 报告 ----------
       - name: 提交并推送 bug 报告到私有仓库
         run: |
           cd novel-repo
@@ -201,9 +227,17 @@ jobs:
           git commit -m "chore: 自动更新检查报告 [skip ci]"
           git push
 
+      # ---------- 7. 最终状态检查 ----------
       - name: 最终状态检查
         run: |
-          if [ "$HAS_SENSITIVE" = "1" ] || [ "$HAS_REDUNDANCY" = "1" ]; then
+          HAS_ISSUE=0
+          [ "$HAS_SENSITIVE" = "1" ] && HAS_ISSUE=1 && echo "::warning::发现敏感词"
+          [ "$HAS_REDUNDANCY" = "1" ] && HAS_ISSUE=1 && echo "::warning::发现沉冗内容"
+          [ "$HAS_AISLOP" = "1" ] && HAS_ISSUE=1 && echo "::warning::发现 AI 写作特征"
+          [ "$HAS_CONSISTENCY" = "1" ] && HAS_ISSUE=1 && echo "::warning::发现叙事一致性问题"
+          [ "$HAS_SPELLING" = "1" ] && HAS_ISSUE=1 && echo "::warning::发现语法/用字错误"
+
+          if [ "$HAS_ISSUE" = "1" ]; then
             echo "::error::检查发现内容问题，请查看 novel-repo/bug/ 目录。"
             exit 1
           fi
