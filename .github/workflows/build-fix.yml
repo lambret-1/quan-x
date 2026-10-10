@@ -3,7 +3,7 @@ name: Novel Content Check
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 2 * * *'   # 每天凌晨2点自动跑一次
+    - cron: '0 2 * * *'
 
 jobs:
   check:
@@ -22,45 +22,126 @@ jobs:
           cd novel-repo
           mkdir -p bug
 
-          # 1. 下载词库
-          git clone --depth 1 https://github.com/konsheng/Sensitive-lexicon.git /tmp/sensitive
-          find /tmp/sensitive -name '*.txt' -exec cat {} + | sort -u > /tmp/words.txt
+          # 1. 下载指定的网易前端过滤敏感词库
+          curl -sSL -o /tmp/words.txt "https://raw.githubusercontent.com/konsheng/Sensitive-lexicon/refs/heads/main/Vocabulary/网易前端过滤敏感词库.txt"
 
-          # 2. 生成内置白名单（过滤高频误报词，可按需增加）
-          cat << 'EOF' > /tmp/builtin_whitelist.txt
+          # 检查下载是否成功
+          if [ ! -s /tmp/words.txt ]; then
+            echo "::error::敏感词库下载失败或为空"
+            exit 1
+          fi
+
+          # 2. 内置白名单（过滤正常小说词汇，可按需继续添加）
+          cat << 'EOF' > /tmp/whitelist.txt
           女人
           男人
+          孩子
+          老人
+          母亲
+          父亲
+          儿子
+          女儿
+          丈夫
+          妻子
+          婆婆
+          爷爷
+          奶奶
           手
-          死
-          血
-          钱
+          脚
+          头
+          脸
+          眼睛
+          嘴
+          心
           抓
-          发白
-          眼神
-          心里
+          握
+          拿
+          放
+          走
+          跑
+          看
+          说
+          钱
+          碗
+          筷子
+          桌子
+          椅子
+          灯
+          画
+          纸
+          笔
           影子
-          影子
-          影痕
+          墨痕
+          影契
           画室
           沈砚
           苏听晚
+          陈婆婆
+          正午
+          阳光
+          黄昏
+          路灯
+          老樟树
+          梧水街
+          一心堂
+          死
+          血
+          杀
+          尸
+          骨
+          痛
+          伤
+          打
+          骂
+          撕
+          咬
+          吞
+          咽
+          鬼
+          魂
+          命
+          活着
+          死亡
+          血腥
+          残忍
+          恶
+          黑暗
+          阴冷
+          挣扎
+          嘶叫
+          剥离
+          代价
+          诅咒
+          绝望
+          恐惧
+          害怕
+          疯狂
+          崩溃
+          窒息
+          颤抖
+          尖叫
+          愤怒
+          仇恨
+          悲伤
+          哭泣
+          眼泪
+          心脏
+          胸口
+          呼吸
+          身体
+          皮肤
+          血管
           EOF
 
-          # 3. 合并外部白名单（如果存在）
-          if [ -f .github/sensitive-whitelist.txt ]; then
-            cat .github/sensitive-whitelist.txt >> /tmp/builtin_whitelist.txt
-          fi
-
-          # 4. 从词库中剔除白名单词汇
-          # 注意：这会过滤掉词库中包含这些词的条目，极大降低误报
-          grep -v -F -f /tmp/builtin_whitelist.txt /tmp/words.txt > /tmp/words.filtered.txt
+          # 3. 从词库中剔除白名单词汇
+          grep -v -F -f /tmp/whitelist.txt /tmp/words.txt > /tmp/words.filtered.txt
 
           echo "过滤后词库条数: $(wc -l < /tmp/words.filtered.txt)"
 
-          # 5. 扫描小说，生成报告
+          # 4. 扫描小说并生成报告
           if grep -r -n -F -f /tmp/words.filtered.txt "《影笔代理人》" --include='*.md' \
              > bug/sensitive_words.txt; then
-            echo "发现敏感词，已写入 bug/sensitive_words.txt"
+            echo "发现敏感词已写入 bug/sensitive_words.txt"
             echo "HAS_SENSITIVE=1" >> $GITHUB_ENV
           else
             echo "未发现敏感词。"
@@ -87,7 +168,7 @@ jobs:
                   if len(s) > MAX_LEN:
                       issues.append(f"{p}:{i}: 段落过长（{len(s)} 字）")
                   if re.search(r'(.{2,6})\1{2,}', s):
-                      issues.append(f"{p}:{i}: 疑似重复表的达")
+                      issues.append(f"{p}:{i}: 疑似重复表达")
 
           if issues:
               bug_dir = pathlib.Path('bug')
