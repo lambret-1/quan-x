@@ -23,7 +23,7 @@ jobs:
           mkdir -p bug
 
           # 1. 下载指定的网易前端过滤敏感词库
-          curl -sSL -o /tmp/words.txt "https://raw.githubusercontent.com/konsheng/Sensitive-lexicon/refs/heads/main/Vocabulary/网易前端过滤敏感词库.txt"
+          curl -sSL -o /tmp/words.txt "https://github.com/konsheng/Sensitive-lexicon/blob/main/Vocabulary/政治类型.txt"
           if [ ! -s /tmp/words.txt ]; then
             echo "::error::敏感词库下载失败或为空"
             exit 1
