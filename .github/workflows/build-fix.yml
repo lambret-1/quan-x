@@ -23,7 +23,7 @@ jobs:
           mkdir -p bug
 
           # 1. 下载指定的网易前端过滤敏感词库
-          curl -sSL -o /tmp/words.txt "https://raw.githubusercontent.com/konsheng/Sensitive-lexicon/refs/heads/main/Vocabulary/政治类型.txt"
+          curl -sSL -o /tmp/words.txt "https://raw.githubusercontent.com/konsheng/Sensitive-lexicon/refs/heads/main/Vocabulary/网易前端过滤敏感词库.txt"
           if [ ! -s /tmp/words.txt ]; then
             echo "::error::敏感词库下载失败或为空"
             exit 1
@@ -135,7 +135,7 @@ jobs:
           grep -v -F -f /tmp/whitelist.txt /tmp/words.txt > /tmp/words.filtered.txt
           echo "过滤后词库条数: $(wc -l < /tmp/words.filtered.txt)"
 
-          # 4. 扫描小说，总是写入报告文件（先写入时间戳，保证内容每次都变）
+          # 4. 扫描小说，总是写入报告文件
           echo "检查时间: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" > bug/sensitive_words.txt
           echo "----------------------------------------" >> bug/sensitive_words.txt
 
@@ -151,8 +151,7 @@ jobs:
         run: |
           cd novel-repo
           python3 - <<'PY'
-          import pathlib, re, sys, os
-          import datetime
+          import pathlib, re, sys, os, datetime
 
           ROOT = pathlib.Path('《影笔代理人》')
           MAX_LEN = 200
@@ -164,17 +163,19 @@ jobs:
                   s = line.strip()
                   if not s:
                       continue
+                  # 检查段落过长
                   if len(s) > MAX_LEN:
                       issues.append(f"{p}:{i}: 段落过长（{len(s)} 字）")
-                 match = re.search(r'(.{2,6})\1{2,}', s)
-if match:
-    issues.append(f"{p}:{i}: 疑似重复表达（重复内容：'{match.group(0)}'）")
+                  # 检查疑似重复表达，并捕获重复内容
+                  match = re.search(r'(.{2,6})\1{2,}', s)
+                  if match:
+                      # match.group(0) 是整段重复的内容，match.group(1) 是重复的基础词
+                      issues.append(f"{p}:{i}: 疑似重复表达（重复内容：'{match.group(0)}'）")
 
           bug_dir = pathlib.Path('bug')
           bug_dir.mkdir(exist_ok=True)
           report_file = bug_dir / 'redundancy.txt'
 
-          # 时间戳直接写进文件，保证每次生成的内容都不一样
           current_time = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
           content = f"检查时间: {current_time}\n----------------------------------------\n"
           
