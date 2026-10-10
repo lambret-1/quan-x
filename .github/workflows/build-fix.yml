@@ -17,7 +17,7 @@ jobs:
           token: ${{ secrets.NOVEL_REPO_PAT }}
           path: novel-repo
 
-      # 【修改点1】：强制安装CPU版PyTorch，防止CI下载巨大的GPU包导致失败
+      # 【修改点1】：强制安装CPU版的PyTorch，防止CI下载巨大的GPU包导致失败
       - name: 安装 Python 依赖
         run: |
           pip install zh-narrative-guard pycorrector torch --index-url https://download.pytorch.org/whl/cpu
@@ -130,7 +130,7 @@ jobs:
           exit 0
 
       # ---------- 4. 叙事一致性检查 ----------
-      - name: 叙事一致性检查的
+      - name: 叙事一致性检查
         run: |
           cd novel-repo
           mkdir -p bug
