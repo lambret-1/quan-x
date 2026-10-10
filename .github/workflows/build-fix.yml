@@ -1,10 +1,9 @@
 name: Novel Content Check
 
 on:
-  # 小说仓库是私有的，无法从那边触发，所以用手动 + 定时
   workflow_dispatch:
   schedule:
-    - cron: '0 2 * * *'   # 每天凌晨2点自动跑一次
+    - cron: '0 2 * * *'
 
 jobs:
   check:
@@ -17,9 +16,13 @@ jobs:
           repository: lambret-1/MyNovels
           token: ${{ secrets.NOVEL_REPO_PAT }}
           path: novel-repo
+          persist-credentials: true
 
       - name: 敏感词检查
         run: |
+          cd novel-repo
+          mkdir -p bug
+
           git clone --depth 1 https://github.com/konsheng/Sensitive-lexicon.git /tmp/sensitive
           find /tmp/sensitive -name '*.txt' -exec cat {} + | sort -u > /tmp/words.txt
 
@@ -31,20 +34,24 @@ jobs:
 
           echo "词库条数: $(wc -l < /tmp/words.filtered.txt)"
 
-          if grep -r -n -F -f /tmp/words.filtered.txt "novel-repo/《影笔代理人》" --include='*.md' \
-             | cut -d: -f1,2 > /tmp/hits.txt; then
-            echo "命中以下位置："
-            cat /tmp/hits.txt
-            echo "::error::发现敏感词，请对照行号检查。"
-            exit 1
+          # 把命中结果写入 bug 文件夹，即使命中也不会中断
+          if grep -r -n -F -f /tmp/words.filtered.txt "《影笔代理人》" --include='*.md' \
+             > bug/sensitive_words.txt; then
+            echo "发现敏感词，已写入 bug/sensitive_words.txt"
+            echo "HAS_SENSITIVE=1" >> $GITHUB_ENV
+          else
+            echo "未发现敏感词。"
+            rm -f bug/sensitive_words.txt
           fi
+          exit 0
 
       - name: 沉冗内容检查
         run: |
+          cd novel-repo
           python3 - <<'PY'
           import pathlib, re, sys
 
-          ROOT = pathlib.Path('novel-repo/《影笔代理人》')
+          ROOT = pathlib.Path('《影笔代理人》')
           MAX_LEN = 200
           issues = []
 
@@ -57,11 +64,35 @@ jobs:
                   if len(s) > MAX_LEN:
                       issues.append(f"{p}:{i}: 段落过长（{len(s)} 字）")
                   if re.search(r'(.{2,6})\1{2,}', s):
-                      issues.append(f"{p}:{i}: 疑似的重复表达")
+                      issues.append(f"{p}:{i}: 疑似重复表达")
 
           if issues:
-              print("\n".join(issues))
-              print("::error::发现沉冗或重复内容。")
-              sys.exit(1)
+              bug_dir = pathlib.Path('bug')
+              bug_dir.mkdir(exist_ok=True)
+              (bug_dir / 'redundancy.txt').write_text("\n".join(issues), encoding='utf-8')
+              print("发现沉冗或重复内容，已写入 bug/redundancy.txt")
+              sys.exit(0)
           print("沉冗检查通过。")
           PY
+          if [ -f bug/redundancy.txt ]; then
+            echo "HAS_REDUNDANCY=1" >> $GITHUB_ENV
+          fi
+          exit 0
+
+      - name: 提交并推送 bug 报告私有仓库
+        if: env.HAS_SENSITIVE == '1' || env.HAS_REDUNDANCY == '1'
+        run: |
+          cd novel-repo
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add bug/
+          git commit -m "chore: 自动更新检查报告 [skip ci]" || echo "没有变更需要提交"
+          git push
+
+      - name: 最终状态检查
+        run: |
+          if [ -f novel-repo/bug/sensitive_words.txt ] || [ -f novel-repo/bug/redundancy.txt ]; then
+            echo "::error::检查发现内容问题，请查看 novel-repo/bug/ 目录。"
+            exit 1
+          fi
+          echo "全部检查通过。"
