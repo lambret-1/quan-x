@@ -1,0 +1,67 @@
+name: Novel Content Check
+
+on:
+  # 小说仓库是私有的，无法从那边触发，所以用手动 + 定时
+  workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * *'   # 每天凌晨2点自动跑一次
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 拉取私密小说仓库
+        uses: actions/checkout@v4
+        with:
+          repository: lambret-1/MyNovels
+          token: ${{ secrets.NOVEL_REPO_PAT }}
+          path: novel-repo
+
+      - name: 敏感词检查
+        run: |
+          git clone --depth 1 https://github.com/konsheng/Sensitive-lexicon.git /tmp/sensitive
+          find /tmp/sensitive -name '*.txt' -exec cat {} + | sort -u > /tmp/words.txt
+
+          if [ -f .github/sensitive-whitelist.txt ]; then
+            grep -v -F -f .github/sensitive-whitelist.txt /tmp/words.txt > /tmp/words.filtered.txt
+          else
+            cp /tmp/words.txt /tmp/words.filtered.txt
+          fi
+
+          echo "词库条数: $(wc -l < /tmp/words.filtered.txt)"
+
+          if grep -r -n -F -f /tmp/words.filtered.txt "novel-repo/《影笔代理人》" --include='*.md' \
+             | cut -d: -f1,2 > /tmp/hits.txt; then
+            echo "命中以下位置："
+            cat /tmp/hits.txt
+            echo "::error::发现敏感词，请对照行号检查。"
+            exit 1
+          fi
+
+      - name: 沉冗内容检查
+        run: |
+          python3 - <<'PY'
+          import pathlib, re, sys
+
+          ROOT = pathlib.Path('novel-repo/《影笔代理人》')
+          MAX_LEN = 200
+          issues = []
+
+          for p in sorted(ROOT.rglob('*.md')):
+              text = p.read_text(encoding='utf-8', errors='ignore')
+              for i, line in enumerate(text.splitlines(), 1):
+                  s = line.strip()
+                  if not s:
+                      continue
+                  if len(s) > MAX_LEN:
+                      issues.append(f"{p}:{i}: 段落过长（{len(s)} 字）")
+                  if re.search(r'(.{2,6})\1{2,}', s):
+                      issues.append(f"{p}:{i}: 疑似的重复表达")
+
+          if issues:
+              print("\n".join(issues))
+              print("::error::发现沉冗或重复内容。")
+              sys.exit(1)
+          print("沉冗检查通过。")
+          PY
