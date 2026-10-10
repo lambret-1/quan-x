@@ -29,7 +29,7 @@ jobs:
             exit 1
           fi
 
-          # 2. 内置白名单（过滤正常小说词汇）
+          # 2. 内置白名单
           cat << 'EOF' > /tmp/whitelist.txt
           女人
           男人
@@ -145,7 +145,7 @@ jobs:
           fi
           exit 0
 
-      - name: 沉冗内容的检查
+      - name: 沉冗内容检查
         run: |
           cd novel-repo
           python3 - <<'PY'
@@ -181,23 +181,24 @@ jobs:
           PY
           exit 0
 
+      - name: 生成时间戳日志（保证每次都有文件变化）
+        run: |
+          cd novel-repo
+          echo "本次检查时间: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" > bug/check_log.txt
+
       - name: 提交并推送 bug 报告到私有仓库
         run: |
           cd novel-repo
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add bug/
-          if git diff --cached --quiet; then
-            echo "没有变更，跳过提交"
-          else
-            git commit -m "chore: 自动更新检查报告 [skip ci]"
-            git push
-          fi
+          git commit -m "chore: 自动更新检查报告 [skip ci]"
+          git push
 
       - name: 最终状态检查
         run: |
           if [ "$HAS_SENSITIVE" = "1" ] || [ "$HAS_REDUNDANCY" = "1" ]; then
-            echo "::error::检查发现内容问题，请查看 novel-repo/bug/ 目录。"
+            echo "::error::检查发现到内容问题，请查看 novel-repo/bug/ 目录。"
             exit 1
           fi
           echo "全部检查通过。"
