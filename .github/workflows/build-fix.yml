@@ -3,7 +3,7 @@ name: Novel Content Check
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 2 * * *'
+    - cron: '0 2 * * *'   # 每天凌晨2点自动跑一次
 
 jobs:
   check:
@@ -16,25 +16,48 @@ jobs:
           repository: lambret-1/MyNovels
           token: ${{ secrets.NOVEL_REPO_PAT }}
           path: novel-repo
-          persist-credentials: true
 
       - name: 敏感词检查
         run: |
           cd novel-repo
           mkdir -p bug
 
+          # 1. 下载词库
           git clone --depth 1 https://github.com/konsheng/Sensitive-lexicon.git /tmp/sensitive
           find /tmp/sensitive -name '*.txt' -exec cat {} + | sort -u > /tmp/words.txt
 
+          # 2. 生成内置白名单（过滤高频误报词，可按需增加）
+          cat << 'EOF' > /tmp/builtin_whitelist.txt
+          女人
+          男人
+          手
+          死
+          血
+          钱
+          抓
+          发白
+          眼神
+          心里
+          影子
+          影子
+          影痕
+          画室
+          沈砚
+          苏听晚
+          EOF
+
+          # 3. 合并外部白名单（如果存在）
           if [ -f .github/sensitive-whitelist.txt ]; then
-            grep -v -F -f .github/sensitive-whitelist.txt /tmp/words.txt > /tmp/words.filtered.txt
-          else
-            cp /tmp/words.txt /tmp/words.filtered.txt
+            cat .github/sensitive-whitelist.txt >> /tmp/builtin_whitelist.txt
           fi
 
-          echo "词库条数: $(wc -l < /tmp/words.filtered.txt)"
+          # 4. 从词库中剔除白名单词汇
+          # 注意：这会过滤掉词库中包含这些词的条目，极大降低误报
+          grep -v -F -f /tmp/builtin_whitelist.txt /tmp/words.txt > /tmp/words.filtered.txt
 
-          # 把命中结果写入 bug 文件夹，即使命中也不会中断
+          echo "过滤后词库条数: $(wc -l < /tmp/words.filtered.txt)"
+
+          # 5. 扫描小说，生成报告
           if grep -r -n -F -f /tmp/words.filtered.txt "《影笔代理人》" --include='*.md' \
              > bug/sensitive_words.txt; then
             echo "发现敏感词，已写入 bug/sensitive_words.txt"
@@ -64,7 +87,7 @@ jobs:
                   if len(s) > MAX_LEN:
                       issues.append(f"{p}:{i}: 段落过长（{len(s)} 字）")
                   if re.search(r'(.{2,6})\1{2,}', s):
-                      issues.append(f"{p}:{i}: 疑似重复表达")
+                      issues.append(f"{p}:{i}: 疑似重复表的达")
 
           if issues:
               bug_dir = pathlib.Path('bug')
@@ -79,7 +102,7 @@ jobs:
           fi
           exit 0
 
-      - name: 提交并推送 bug 报告私有仓库
+      - name: 提交并推送 bug 报告到私有仓库
         if: env.HAS_SENSITIVE == '1' || env.HAS_REDUNDANCY == '1'
         run: |
           cd novel-repo
