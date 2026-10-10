@@ -25,7 +25,7 @@ jobs:
           token: ${{ secrets.NOVEL_REPO_PAT }}
           path: novel-repo
 
-      # ---------- 1. 敏感词了检查（政治类型） ----------
+      # ---------- 1. 敏感词检查（政治类型） ----------
       - name: 敏感词检查
         run: |
           cd novel-repo
@@ -36,8 +36,6 @@ jobs:
             echo "::error::敏感词库下载失败或为空"
             exit 1
           fi
-
-          echo "词库条数: $(wc -l < /tmp/words.txt)"
 
           echo "检查时间: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" > bug/sensitive_words.txt
           echo "----------------------------------------" >> bug/sensitive_words.txt
@@ -93,7 +91,7 @@ jobs:
           PY
           exit 0
 
-      # ---------- 3. 反 AI 味检测 ----------
+      # ---------- 3. 反 AI 味检测（优化版，只输出有效结果，精简路径） ----------
       - name: 反 AI 味检测
         run: |
           cd novel-repo
@@ -115,20 +113,42 @@ jobs:
           bug_dir = pathlib.Path('bug')
           report_file = bug_dir / 'ai_slop.txt'
 
-          if data:
-              with open(report_file, 'a', encoding='utf-8') as out:
-                  for item in data:
-                      file = item.get('file', '')
-                      line = item.get('line', '')
-                      rule = item.get('rule', '')
-                      message = item.get('message', '')
-                      out.write(f"{file}:{line}: [{rule}] {message}\n")
-              print(f"发现 {len(data)} 处 AI 写作特征")
+          # wsc-lint 的输出通常是 { "文件路径": [ {line, rule, message}, ... ] }
+          # 我们遍历字典，过滤掉空数组
+          has_issue = False
+          if isinstance(data, dict):
+              for file_path, warnings in data.items():
+                  if not warnings:  # 跳过没有警告的文件
+                      continue
+                  # 清理路径：去掉 CI 环境的前缀
+                  clean_path = file_path.replace('/home/runner/work/quan-x/quan-x/novel-repo/', '')
+                  for warn in warnings:
+                      line = warn.get('line', '')
+                      rule = warn.get('rule', '')
+                      message = warn.get('message', '')
+                      with open(report_file, 'a', encoding='utf-8') as out:
+                          out.write(f"{clean_path}:{line}: [{rule}] {message}\n")
+                      has_issue = True
+          # 兼容 wsc-lint 直接返回列表的情
+          elif isinstance(data, list):
+              for item in data:
+                  file_path = item.get('file', '')
+                  # 同样清理路径
+                  clean_path = file_path.replace('/home/runner/work/quan-x/quan-x/novel-repo/', '')
+                  line = item.get('line', '')
+                  rule = item.get('rule', '')
+                  message = item.get('message', '')
+                  with open(report_file, 'a', encoding='utf-8') as out:
+                      out.write(f"{clean_path}:{line}: [{rule}] {message}\n")
+                  has_issue = True
+
+          if has_issue:
+              print("发现 AI 写作特征，已精简写入 bug/ai_slop.txt")
               with open(os.environ['GITHUB_ENV'], 'a') as f:
                   f.write("HAS_AISLOP=1\n")
           else:
               with open(report_file, 'a', encoding='utf-8') as out:
-                  out.write("未发现 AI 写作特征\n")
+                  out.write("未发现 AI 写作特征（或工具对中文支持有限）\n")
               print("反 AI 味检测通过")
           PY
           exit 0
