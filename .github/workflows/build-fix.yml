@@ -135,13 +135,15 @@ jobs:
           grep -v -F -f /tmp/whitelist.txt /tmp/words.txt > /tmp/words.filtered.txt
           echo "过滤后词库条数: $(wc -l < /tmp/words.filtered.txt)"
 
-          # 4. 扫描小说，总是写入报告文件
-          if grep -r -n -F -f /tmp/words.filtered.txt "《影笔代理人》" --include='*.md' > bug/sensitive_words.txt; then
+          # 4. 扫描小说，总是写入报告文件（先写入时间戳，保证内容每次都变）
+          echo "检查时间: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" > bug/sensitive_words.txt
+          echo "----------------------------------------" >> bug/sensitive_words.txt
+
+          if grep -r -n -F -f /tmp/words.filtered.txt "《影笔代理人》" --include='*.md' >> bug/sensitive_words.txt; then
             echo "发现敏感词，已写入 bug/sensitive_words.txt"
             echo "HAS_SENSITIVE=1" >> $GITHUB_ENV
           else
-            echo "未发现敏感词。"
-            echo "未发现敏感词" > bug/sensitive_words.txt
+            echo "未发现敏感词。" >> bug/sensitive_words.txt
           fi
           exit 0
 
@@ -150,6 +152,7 @@ jobs:
           cd novel-repo
           python3 - <<'PY'
           import pathlib, re, sys, os
+          import datetime
 
           ROOT = pathlib.Path('《影笔代理人》')
           MAX_LEN = 200
@@ -170,21 +173,22 @@ jobs:
           bug_dir.mkdir(exist_ok=True)
           report_file = bug_dir / 'redundancy.txt'
 
+          # 时间戳直接写进文件，保证每次生成的内容都不一样
+          current_time = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
+          content = f"检查时间: {current_time}\n----------------------------------------\n"
+          
           if issues:
-              report_file.write_text("\n".join(issues), encoding='utf-8')
+              content += "\n".join(issues)
               print("发现沉冗或重复内容，已写入 bug/redundancy.txt")
               with open(os.environ['GITHUB_ENV'], 'a') as f:
                   f.write("HAS_REDUNDANCY=1\n")
           else:
-              report_file.write_text("未发现沉冗问题", encoding='utf-8')
+              content += "未发现沉冗问题"
               print("沉冗检查通过。")
+
+          report_file.write_text(content, encoding='utf-8')
           PY
           exit 0
-
-      - name: 生成时间戳日志（保证每次都有文件变化）
-        run: |
-          cd novel-repo
-          echo "本次检查时间: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" > bug/check_log.txt
 
       - name: 提交并推送 bug 报告到私有仓库
         run: |
@@ -198,7 +202,7 @@ jobs:
       - name: 最终状态检查
         run: |
           if [ "$HAS_SENSITIVE" = "1" ] || [ "$HAS_REDUNDANCY" = "1" ]; then
-            echo "::error::检查发现到内容问题，请查看 novel-repo/bug/ 目录。"
+            echo "::error::检查发现内容问题，请查看 novel-repo/bug/ 目录。"
             exit 1
           fi
           echo "全部检查通过。"
