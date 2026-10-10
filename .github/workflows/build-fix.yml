@@ -2,12 +2,20 @@ name: Novel Content Check
 
 on:
   workflow_dispatch:
- !  schedule:
+  push:
+    paths:
+      - '.github/workflows/novel-check.yml'
+      - '.github/workflows/build-fix.yml'
+  pull_request:
+    paths:
+      - '.github/workflows/novel-check.yml'
+      - '.github/workflows/build-fix.yml'
+  schedule:
     - cron: '0 2 * * *'
 
 jobs:
   check:
-    runs-on: - ubuntu-latest
+    runs-on: ubuntu-latest
 
     steps:
       - name: 拉取私密小说仓库
@@ -17,7 +25,6 @@ jobs:
           token: ${{ secrets.NOVEL_REPO_PAT }}
           path: novel-repo
 
-      # 【修改点1】：强制安装CPU版的PyTorch，防止CI下载巨大的GPU包导致失败
       - name: 安装 Python 依赖
         run: |
           pip install zh-narrative-guard pycorrector torch --index-url https://download.pytorch.org/whl/cpu
@@ -28,7 +35,8 @@ jobs:
           cd novel-repo
           mkdir -p bug
 
-          curl -sSL -o /tmp/words.txt "https://raw.githubusercontent.com/konsheng/Sensitive-lexicon/refs/heads/main/Vocabulary/政治类型.txts /tmp/words.txt ]; then
+          curl -sSL -o /tmp/words.txt "https://raw.githubusercontent.com/konsheng/Sensitive-lexicon/refs/heads/main/Vocabulary/政治类型.txt"
+          if [ ! -s /tmp/words.txt ]; then
             echo "::error::敏感词库下载失败或为空"
             exit 1
           fi
@@ -129,7 +137,7 @@ jobs:
           PY
           exit 0
 
-      # ---------- 4. 叙事一致性检查 ----------
+      # ---------- 4. 叙事一致性检查----------
       - name: 叙事一致性检查
         run: |
           cd novel-repo
@@ -180,7 +188,7 @@ jobs:
           PY
           exit 0
 
-      # ---------- 5. 语法纠错（【修改点2】增加异常保护） ----------
+      # ---------- 5. 语法纠错 ----------
       - name: 语法纠错
         run: |
           cd novel-repo
@@ -191,7 +199,6 @@ jobs:
           python3 - <<'PY'
           import pathlib, os
           
-          # 尝试初始化，如果失败则跳过，不阻塞后续流程
           try:
               from pycorrector import Corrector
               corrector = Corrector()
@@ -199,7 +206,7 @@ jobs:
               print(f"跳过语法纠错（依赖或模型加载失败）: {e}")
               with open('bug/spelling.txt', 'a', encoding='utf-8') as out:
                   out.write("语法纠错工具未能初始化，已跳过。\n")
-              exit(0)  # 正常退出，让后续步骤继续跑
+              exit(0)
 
           ROOT = pathlib.Path('《影笔代理人》')
           issues = []
@@ -216,7 +223,7 @@ jobs:
                           for d in details:
                               issues.append(f"{p}:{i}: 疑似错误（'{d[0]}' → '{d[1]}'）")
                   except:
-                      pass # 忽略单行报错，继续扫后面的
+                      pass
 
           bug_dir = pathlib.Path('bug')
           report_file = bug_dir / 'spelling.txt'
