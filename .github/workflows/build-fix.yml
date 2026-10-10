@@ -25,6 +25,11 @@ jobs:
           token: ${{ secrets.NOVEL_REPO_PAT }}
           path: novel-repo
 
+      # ---------- 安装 slop-lint ----------
+      - name: 安装 slop-lint
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/IndenScale/slop-lint/main/install.sh | sh
+
       # ---------- 1. 敏感词检查（政治类型） ----------
       - name: 敏感词检查
         run: |
@@ -91,7 +96,7 @@ jobs:
           PY
           exit 0
 
-      # ---------- 3. 反 AI 味检测（优化版，只输出有效结果，精简路径） ----------
+      # ---------- 3. 反 AI 味检测（slop-lint，无问题则不输出） ----------
       - name: 反 AI 味检测
         run: |
           cd novel-repo
@@ -99,12 +104,14 @@ jobs:
           echo "检查时间: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" > bug/ai_slop.txt
           echo "----------------------------------------" >> bug/ai_slop.txt
 
-          npx wsc-lint check "《影笔代理人》/**/*.md" --format json > /tmp/wsc_output.json 2>/dev/null || true
+          # 使用 slop-lint 扫描，输出 JSON
+          slop-lint check "《影笔代理人》/**/*.md" --format json > /tmp/slop_result.json 2>/dev/null || true
 
           python3 - <<'PY'
           import json, pathlib, os
 
-          with open('/tmp/wsc_output.json', encoding='utf-8') as f:
+          # 读取 slop-lint 的 JSON 输出
+          with open('/tmp/slop_result.json', encoding='utf-8') as f:
               try:
                   data = json.load(f)
               except:
@@ -113,47 +120,37 @@ jobs:
           bug_dir = pathlib.Path('bug')
           report_file = bug_dir / 'ai_slop.txt'
 
-          # wsc-lint 的输出通常是 { "文件路径": [ {line, rule, message}, ... ] }
-          # 我们遍历字典，过滤掉空数组
-          has_issue = False
-          if isinstance(data, dict):
-              for file_path, warnings in data.items():
-                  if not warnings:  # 跳过没有警告的文件
-                      continue
-                  # 清理路径：去掉 CI 环境的前缀
-                  clean_path = file_path.replace('/home/runner/work/quan-x/quan-x/novel-repo/', '')
-                  for warn in warnings:
-                      line = warn.get('line', '')
-                      rule = warn.get('rule', '')
-                      message = warn.get('message', '')
-                      with open(report_file, 'a', encoding='utf-8') as out:
-                          out.write(f"{clean_path}:{line}: [{rule}] {message}\n")
-                      has_issue = True
-          # 兼容 wsc-lint 直接返回列表的情
-          elif isinstance(data, list):
+          findings = []
+          # slop-lint 输出通常是数组，每项包含 file, line, rule, message
+          if isinstance(data, list):
               for item in data:
+                  if not isinstance(item, dict):
+                      continue
+                  # 只保留有实际 message 的条目
+                  if not item.get('message'):
+                      continue
                   file_path = item.get('file', '')
-                  # 同样清理路径
+                  # 清理路径，只保留相对路径
                   clean_path = file_path.replace('/home/runner/work/quan-x/quan-x/novel-repo/', '')
                   line = item.get('line', '')
                   rule = item.get('rule', '')
                   message = item.get('message', '')
-                  with open(report_file, 'a', encoding='utf-8') as out:
-                      out.write(f"{clean_path}:{line}: [{rule}] {message}\n")
-                  has_issue = True
+                  findings.append(f"{clean_path}:{line}: [{rule}] {message}")
 
-          if has_issue:
-              print("发现 AI 写作特征，已精简写入 bug/ai_slop.txt")
+          if findings:
+              with open(report_file, 'a', encoding='utf-8') as out:
+                  out.write("\n".join(findings))
+              print(f"发现 {len(findings)} 处 AI 写作特征")
               with open(os.environ['GITHUB_ENV'], 'a') as f:
                   f.write("HAS_AISLOP=1\n")
           else:
-              with open(report_file, 'a', encoding='utf-8') as out:
-                  out.write("未发现 AI 写作特征（或工具对中文支持有限）\n")
-              print("反 AI 味检测通过")
+              # 没有检测到问题，直接删除报告文件，保持 bug 文件夹干净
+              report_file.unlink(missing_ok=True)
+              print("反 AI 味检测通过，未发现 AI 写作特征")
           PY
           exit 0
 
-      # ---------- 4. 提交并推送 bug 报告 ----------
+      # ---------- 4. 提交并推送 bug 的报告 ----------
       - name: 提交并推送 bug 报告到私有仓库
         run: |
           cd novel-repo
