@@ -25,7 +25,7 @@ jobs:
           token: ${{ secrets.NOVEL_REPO_PAT }}
           path: novel-repo
 
-      # ---------- 1. 敏感词的检查（政治类型） ----------
+      # ---------- 1. 敏感词检查（政治类型） ----------
       - name: 敏感词检查
         run: |
           cd novel-repo
@@ -91,7 +91,7 @@ jobs:
           PY
           exit 0
 
-      # ---------- 3. 破折号检测（新增） ----------
+      # ---------- 3. 破折号检测 ----------
       - name: 破折号检测
         run: |
           cd novel-repo
@@ -103,9 +103,7 @@ jobs:
 
           for p in sorted(ROOT.rglob('*.md')):
               text = p.read_text(encoding='utf-8', errors='ignore')
-              # 匹配连续的中文破折号 "—"
               dashes = re.findall(r'—+', text)
-              # 如果一个文件里破折号出现大于 2 次
               if len(dashes) > 2:
                   issues.append(f"{p}: 本章共发现 {len(dashes)} 个破折号")
 
@@ -129,7 +127,50 @@ jobs:
           PY
           exit 0
 
-      # ---------- 4. 反 AI 味检测（基于规则的中文 AI 腔调检测） ----------
+      # ---------- 4. 标点滥用检查（新增） ----------
+      - name: 标点滥用检查
+        run: |
+          cd novel-repo
+          python3 - <<'PY'
+          import pathlib, re, os, datetime
+
+          ROOT = pathlib.Path('《影笔代理人》')
+          issues = []
+
+          # 匹配：一个汉字 + 一个标点，或者两个汉字 + 一个标点
+          # 标点集合：。！？；：，、
+          pattern = re.compile(r'[\u4e00-\u9fa5](?:[\u4e00-\u9fa5])?[。！？；：，、]')
+
+          for p in sorted(ROOT.rglob('*.md')):
+              text = p.read_text(encoding='utf-8', errors='ignore')
+              matches = pattern.findall(text)
+              count = len(matches)
+              if count > 10:
+                  issues.append(f"{p}: 本章共发现 {count} 处单字/双字后紧接标点")
+
+          bug_dir = pathlib.Path('bug')
+          bug_dir.mkdir(exist_ok=True)
+          report_file = bug_dir / 'punctuation_abuse.txt'
+
+          current_time = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
+          content = f"检查时间: {current_time}\n----------------------------------------\n"
+
+          if issues:
+              total_chapters = len(issues)
+              content += f"总共发现了 {total_chapters} 章滥用内容，以下是具体章节：\n\n"
+              content += "\n".join(issues)
+              print(f"发现 {total_chapters} 章滥用标点符号")
+              with open(os.environ['GITHUB_ENV'], 'a') as f:
+                  f.write("HAS_PUNCTUATION_ABUSE=1\n")
+          else:
+              content += "未发现标点滥用问题"
+              print("标点滥用检查通过")
+
+          report_file.write_text(content, encoding='utf-8')
+          PY
+          exit 0
+
+      # ---------- 5. 反 AI 味的检测 ----------
       - name: 反 AI 味检测
         run: |
           cd novel-repo
@@ -139,7 +180,6 @@ jobs:
           ROOT = pathlib.Path('《影笔代理人》')
           issues = []
 
-          # ====== 中文 AI 味特征规则集 ======
           rules = [
               ("模板句式-不是而是", r'不是.{1,20}，?而是', "AI 常见对比句式"),
               ("模板句式-与其不如", r'与其说.{1,20}，?不如说', "AI 常见对比句式"),
@@ -204,7 +244,7 @@ jobs:
           PY
           exit 0
 
-      # ---------- 5. 提交并推送 bug 报告 ----------
+      # ---------- 6. 提交并推送 bug 报告 ----------
       - name: 提交并推送 bug 报告到私有仓库
         run: |
           cd novel-repo
@@ -214,13 +254,14 @@ jobs:
           git commit -m "chore: 自动更新检查报告 [skip ci]"
           git push
 
-      # ---------- 6. 最终状态检查 ----------
+      # ---------- 7. 最终状态检查 ----------
       - name: 最终状态检查
         run: |
           HAS_ISSUE=0
           [ "$HAS_SENSITIVE" = "1" ] && HAS_ISSUE=1 && echo "::warning::发现敏感词"
           [ "$HAS_REDUNDANCY" = "1" ] && HAS_ISSUE=1 && echo "::warning::发现沉冗内容"
           [ "$HAS_DASH" = "1" ] && HAS_ISSUE=1 && echo "::warning::发现破折号过多"
+          [ "$HAS_PUNCTUATION_ABUSE" = "1" ] && HAS_ISSUE=1 && echo "::warning::发现标点滥用"
           [ "$HAS_AISLOP" = "1" ] && HAS_ISSUE=1 && echo "::warning::发现 AI 写作特征"
 
           if [ "$HAS_ISSUE" = "1" ]; then
