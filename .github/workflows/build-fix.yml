@@ -166,8 +166,8 @@ jobs:
                       continue
                   if len(s) > MAX_LEN:
                       issues.append(f"{p}:{i}: 段落过长（{len(s)} 字）")
-                  if re.search(r'(.{2,6})\1{2,}', s):
-                      issues.append(f"{p}:{i}: 疑似重复表达")
+                 match = re.search(r'(.{2,6})\1{2,}', s)
+                 if match:issues.append(f"{p}:{i}: 疑似重复表达（重复内容：'{match.group(0)}'）")
 
           bug_dir = pathlib.Path('bug')
           bug_dir.mkdir(exist_ok=True)
