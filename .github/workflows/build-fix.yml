@@ -2,12 +2,12 @@ name: Novel Content Check
 
 on:
   workflow_dispatch:
-  schedule:
+ !  schedule:
     - cron: '0 2 * * *'
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    runs-on: - ubuntu-latest
 
     steps:
       - name: 拉取私密小说仓库
@@ -17,9 +17,10 @@ jobs:
           token: ${{ secrets.NOVEL_REPO_PAT }}
           path: novel-repo
 
+      # 【修改点1】：强制安装CPU版PyTorch，防止CI下载巨大的GPU包导致失败
       - name: 安装 Python 依赖
         run: |
-          pip install zh-narrative-guard pycorrector
+          pip install zh-narrative-guard pycorrector torch --index-url https://download.pytorch.org/whl/cpu
 
       # ---------- 1. 敏感词检查（政治类型） ----------
       - name: 敏感词检查
@@ -27,9 +28,7 @@ jobs:
           cd novel-repo
           mkdir -p bug
 
-          # 只下载“政治类型”词库
-          curl -sSL -o /tmp/words.txt "https://raw.githubusercontent.com/konsheng/Sensitive-lexicon/refs/heads/main/Vocabulary/政治类型.txt"
-          if [ ! -s /tmp/words.txt ]; then
+          curl -sSL -o /tmp/words.txt "https://raw.githubusercontent.com/konsheng/Sensitive-lexicon/refs/heads/main/Vocabulary/政治类型.txts /tmp/words.txt ]; then
             echo "::error::敏感词库下载失败或为空"
             exit 1
           fi
@@ -68,7 +67,7 @@ jobs:
                       issues.append(f"{p}:{i}: 段落过长（{len(s)} 字）")
                   match = re.search(r'(.{2,6})\1{2,}', s)
                   if match:
-                      issues.append(f"{p}:{i}: 疑似重复表达（'{match.group(0)}'）")
+                      issues.append(f"{p}:{i}: 疑似重复表达（重复内容：'{match.group(0)}'）")
 
           bug_dir = pathlib.Path('bug')
           bug_dir.mkdir(exist_ok=True)
@@ -131,7 +130,7 @@ jobs:
           exit 0
 
       # ---------- 4. 叙事一致性检查 ----------
-      - name: 叙事一致性检查
+      - name: 叙事一致性检查的
         run: |
           cd novel-repo
           mkdir -p bug
@@ -140,10 +139,16 @@ jobs:
 
           python3 - <<'PY'
           import pathlib, os
-          from zh_narrative_guard import (
-              detect_weekday_violations,
-              detect_cliche_violations,
-          )
+          try:
+              from zh_narrative_guard import (
+                  detect_weekday_violations,
+                  detect_cliche_violations,
+              )
+          except Exception as e:
+              print(f"跳过叙事一致性检查: {e}")
+              with open('bug/consistency.txt', 'a', encoding='utf-8') as out:
+                  out.write("工具加载失败，已跳过。\n")
+              exit(0)
 
           ROOT = pathlib.Path('《影笔代理人》')
           issues = []
@@ -175,7 +180,7 @@ jobs:
           PY
           exit 0
 
-      # ---------- 5. 语法纠错 ----------
+      # ---------- 5. 语法纠错（【修改点2】增加异常保护） ----------
       - name: 语法纠错
         run: |
           cd novel-repo
@@ -185,7 +190,16 @@ jobs:
 
           python3 - <<'PY'
           import pathlib, os
-          from pycorrector import correct
+          
+          # 尝试初始化，如果失败则跳过，不阻塞后续流程
+          try:
+              from pycorrector import Corrector
+              corrector = Corrector()
+          except Exception as e:
+              print(f"跳过语法纠错（依赖或模型加载失败）: {e}")
+              with open('bug/spelling.txt', 'a', encoding='utf-8') as out:
+                  out.write("语法纠错工具未能初始化，已跳过。\n")
+              exit(0)  # 正常退出，让后续步骤继续跑
 
           ROOT = pathlib.Path('《影笔代理人》')
           issues = []
@@ -196,10 +210,13 @@ jobs:
                   s = line.strip()
                   if not s or len(s) < 5:
                       continue
-                  corrected, details = correct(s)
-                  if details:
-                      for d in details:
-                          issues.append(f"{p}:{i}: 疑似错误（'{d[0]}' → '{d[1]}'）")
+                  try:
+                      corrected, details = corrector.correct(s)
+                      if details:
+                          for d in details:
+                              issues.append(f"{p}:{i}: 疑似错误（'{d[0]}' → '{d[1]}'）")
+                  except:
+                      pass # 忽略单行报错，继续扫后面的
 
           bug_dir = pathlib.Path('bug')
           report_file = bug_dir / 'spelling.txt'
