@@ -17,7 +17,7 @@ jobs:
           token: ${{ secrets.NOVEL_REPO_PAT }}
           path: novel-repo
 
-      - name: 敏感词检查
+      - name: 敏感词的检查
         run: |
           cd novel-repo
           mkdir -p bug
@@ -132,6 +132,7 @@ jobs:
           皮肤
           血管
           EOF
+          影笔
 
           # 3. 从词库中剔除白名单词汇
           grep -v -F -f /tmp/whitelist.txt /tmp/words.txt > /tmp/words.filtered.txt
@@ -141,7 +142,7 @@ jobs:
           # 4. 扫描小说并生成报告
           if grep -r -n -F -f /tmp/words.filtered.txt "《影笔代理人》" --include='*.md' \
              > bug/sensitive_words.txt; then
-            echo "发现敏感词已写入 bug/sensitive_words.txt"
+            echo "发现敏感词，已写入 bug/sensitive_words.txt"
             echo "HAS_SENSITIVE=1" >> $GITHUB_ENV
           else
             echo "未发现敏感词。"
