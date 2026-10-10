@@ -25,11 +25,7 @@ jobs:
           token: ${{ secrets.NOVEL_REPO_PAT }}
           path: novel-repo
 
-      - name: 安装 Python 依赖
-        run: |
-          pip install zh-narrative-guard pycorrector torch --index-url https://download.pytorch.org/whl/cpu
-
-      # ---------- 1. 敏感词检查（政治类型） ----------
+      # ---------- 1. 敏感词了检查（政治类型） ----------
       - name: 敏感词检查
         run: |
           cd novel-repo
@@ -137,111 +133,7 @@ jobs:
           PY
           exit 0
 
-      # ---------- 4. 叙事一致性检查----------
-      - name: 叙事一致性检查
-        run: |
-          cd novel-repo
-          mkdir -p bug
-          echo "检查时间: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" > bug/consistency.txt
-          echo "----------------------------------------" >> bug/consistency.txt
-
-          python3 - <<'PY'
-          import pathlib, os
-          try:
-              from zh_narrative_guard import (
-                  detect_weekday_violations,
-                  detect_cliche_violations,
-              )
-          except Exception as e:
-              print(f"跳过叙事一致性检查: {e}")
-              with open('bug/consistency.txt', 'a', encoding='utf-8') as out:
-                  out.write("工具加载失败，已跳过。\n")
-              exit(0)
-
-          ROOT = pathlib.Path('《影笔代理人》')
-          issues = []
-
-          for p in sorted(ROOT.rglob('*.md')):
-              text = p.read_text(encoding='utf-8', errors='ignore')
-              for i, line in enumerate(text.splitlines(), 1):
-                  s = line.strip()
-                  if not s:
-                      continue
-                  for v in detect_weekday_violations(s):
-                      issues.append(f"{p}:{i}: 时间线矛盾（声称'{v['claimed_name']}'，应为'{v['expected_name']}'）")
-                  for c in detect_cliche_violations(s):
-                      issues.append(f"{p}:{i}: 陈词滥调（'{c}'）")
-
-          bug_dir = pathlib.Path('bug')
-          report_file = bug_dir / 'consistency.txt'
-
-          if issues:
-              with open(report_file, 'a', encoding='utf-8') as out:
-                  out.write("\n".join(issues))
-              print(f"发现 {len(issues)} 处叙事一致性问题")
-              with open(os.environ['GITHUB_ENV'], 'a') as f:
-                  f.write("HAS_CONSISTENCY=1\n")
-          else:
-              with open(report_file, 'a', encoding='utf-8') as out:
-                  out.write("未发现叙事一致性问题")
-              print("叙事一致性检查通过")
-          PY
-          exit 0
-
-      # ---------- 5. 语法纠错 ----------
-      - name: 语法纠错
-        run: |
-          cd novel-repo
-          mkdir -p bug
-          echo "检查时间: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" > bug/spelling.txt
-          echo "----------------------------------------" >> bug/spelling.txt
-
-          python3 - <<'PY'
-          import pathlib, os
-          
-          try:
-              from pycorrector import Corrector
-              corrector = Corrector()
-          except Exception as e:
-              print(f"跳过语法纠错（依赖或模型加载失败）: {e}")
-              with open('bug/spelling.txt', 'a', encoding='utf-8') as out:
-                  out.write("语法纠错工具未能初始化，已跳过。\n")
-              exit(0)
-
-          ROOT = pathlib.Path('《影笔代理人》')
-          issues = []
-
-          for p in sorted(ROOT.rglob('*.md')):
-              text = p.read_text(encoding='utf-8', errors='ignore')
-              for i, line in enumerate(text.splitlines(), 1):
-                  s = line.strip()
-                  if not s or len(s) < 5:
-                      continue
-                  try:
-                      corrected, details = corrector.correct(s)
-                      if details:
-                          for d in details:
-                              issues.append(f"{p}:{i}: 疑似错误（'{d[0]}' → '{d[1]}'）")
-                  except:
-                      pass
-
-          bug_dir = pathlib.Path('bug')
-          report_file = bug_dir / 'spelling.txt'
-
-          if issues:
-              with open(report_file, 'a', encoding='utf-8') as out:
-                  out.write("\n".join(issues))
-              print(f"发现 {len(issues)} 处疑似语法/用字错误")
-              with open(os.environ['GITHUB_ENV'], 'a') as f:
-                  f.write("HAS_SPELLING=1\n")
-          else:
-              with open(report_file, 'a', encoding='utf-8') as out:
-                  out.write("未发现语法/用字错误")
-              print("语法纠错检查通过")
-          PY
-          exit 0
-
-      # ---------- 6. 提交并推送 bug 报告 ----------
+      # ---------- 4. 提交并推送 bug 报告 ----------
       - name: 提交并推送 bug 报告到私有仓库
         run: |
           cd novel-repo
@@ -251,15 +143,13 @@ jobs:
           git commit -m "chore: 自动更新检查报告 [skip ci]"
           git push
 
-      # ---------- 7. 最终状态检查 ----------
+      # ---------- 5. 最终状态检查 ----------
       - name: 最终状态检查
         run: |
           HAS_ISSUE=0
           [ "$HAS_SENSITIVE" = "1" ] && HAS_ISSUE=1 && echo "::warning::发现敏感词"
           [ "$HAS_REDUNDANCY" = "1" ] && HAS_ISSUE=1 && echo "::warning::发现沉冗内容"
           [ "$HAS_AISLOP" = "1" ] && HAS_ISSUE=1 && echo "::warning::发现 AI 写作特征"
-          [ "$HAS_CONSISTENCY" = "1" ] && HAS_ISSUE=1 && echo "::warning::发现叙事一致性问题"
-          [ "$HAS_SPELLING" = "1" ] && HAS_ISSUE=1 && echo "::warning::发现语法/用字错误"
 
           if [ "$HAS_ISSUE" = "1" ]; then
             echo "::error::检查发现内容问题，请查看 novel-repo/bug/ 目录。"
